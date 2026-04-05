@@ -1,0 +1,4 @@
+name: zmk-ext-power-smart-idle
+build:
+  cmake: .
+  kconfig: Kconfig

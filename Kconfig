@@ -1,0 +1,5 @@
+config ZMK_EXT_POWER_SMART_IDLE
+    bool "Smart ext-power idle - skip idle timeout when USB is connected"
+    depends on ZMK_EXT_POWER
+    depends on USB_DEVICE_STACK
+    default n
