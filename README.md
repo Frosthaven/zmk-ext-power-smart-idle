@@ -103,6 +103,36 @@ Your board overlay needs an `ext-power` node:
 };
 ```
 
+## Battery Life Estimates
+
+Estimates below assume a split keyboard with 27 WS2812-compatible LEDs per half (6 underglow + 21 per-key), ~15mA base board draw, and brightness clamped to 20% on battery via `CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT=20`. All figures are per half.
+
+### Wireless (per half)
+
+| Scenario | 750mAh (single) | 1500mAh (parallel) |
+|---|---|---|
+| 20% single color, always on | 6.1 hrs | 12.2 hrs |
+| Mixed use, 50% typing | 9 hrs | 18 hrs |
+| Mixed use, 30% typing | 11.4 hrs | 22.7 hrs |
+| LEDs off (idle/sleep) | 17.9 hrs | 35.7 hrs |
+
+### Charging
+
+The nice!nano v2 charges at 100mA by default. Soldering the charge rate jumper on the nice!nano v2 increases the charge rate to 500mA.
+
+| Battery | @ 100mA | @ 500mA |
+|---|---|---|
+| 750mAh (single) | ~7.5 hrs | ~1.5 hrs |
+| 1500mAh (parallel) | ~15 hrs | ~3 hrs |
+
+At 100mA, the charger is slower than the LED draw at full brightness — the battery will slowly drain even while plugged in. At 500mA, the board charges even with LEDs on at full brightness.
+
+| LED State (27 LEDs) | Draw | Net @ 100mA | Net @ 500mA |
+|---|---|---|---|
+| 50% single color | 285mA | -185mA (drain) | +215mA (charge) |
+| 20% single color | 123mA | -23mA (drain) | +377mA (charge) |
+| LEDs off | 42mA | +58mA (charge) | +458mA (charge) |
+
 ## License
 
 MIT
