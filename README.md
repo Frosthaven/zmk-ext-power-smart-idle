@@ -113,16 +113,18 @@ The value is in milliseconds (60000 = 1 minute). This is a system-wide ZMK setti
 
 Estimates below assume a split keyboard with 27 WS2812-compatible LEDs per half (6 underglow + 21 per-key), ~15mA base board draw, and brightness clamped to 20% on battery. All figures are per half.
 
-### Wireless (per half)
+### Wireless (per half, with 5% battery cutoff)
 
-| Scenario | 750mAh | 1500mAh (2x parallel) |
-|---|---|---|
-| 20% single color, always on | 6.1 hrs | 12.2 hrs |
-| Mixed use, 50% typing | 9 hrs | 18 hrs |
-| Mixed use, 30% typing | 11.4 hrs | 22.7 hrs |
-| LEDs off (idle/sleep) | 17.9 hrs | 35.7 hrs |
+With a 5% battery cutoff, LEDs run until the battery drops to 5%, then turn off to preserve typing time.
 
-With a 5% battery cutoff, you get roughly **2.5 hours of additional typing time** after LEDs turn off (750mAh) or **5 hours** (1500mAh), at ~15mA board-only draw.
+| Scenario | 750mAh (LEDs on) | 750mAh (after cutoff) | 1500mAh (LEDs on) | 1500mAh (after cutoff) |
+|---|---|---|---|---|
+| 20% single color, always on | 5.8 hrs | 2.5 hrs | 11.6 hrs | 5 hrs |
+| Mixed use, 50% typing | 8.6 hrs | 2.5 hrs | 17.2 hrs | 5 hrs |
+| Mixed use, 30% typing | 10.8 hrs | 2.5 hrs | 21.6 hrs | 5 hrs |
+| LEDs off (idle/sleep) | — | 17.9 hrs | — | 35.7 hrs |
+
+The "after cutoff" column is typing time remaining at ~15mA board-only draw once LEDs shut off.
 
 ### Charging
 
