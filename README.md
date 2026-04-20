@@ -111,7 +111,7 @@ The value is in milliseconds (60000 = 1 minute). This is a system-wide ZMK setti
 
 ## Battery Life Estimates
 
-Estimates below assume a split keyboard with 27 WS2812-compatible LEDs per half (6 underglow + 21 per-key), ~15mA base board draw, and brightness clamped to 20% on battery. All figures are per half.
+Estimates below assume a split keyboard with 27 WS2812-compatible LEDs per half (6 underglow + 21 per-key), ~15mA base board draw, `CONFIG_ZMK_RGB_UNDERGLOW_BRT_MAX=50`, and brightness clamped to 20% on battery. All figures are per half.
 
 ### Wireless (per half, with 5% battery cutoff)
 
