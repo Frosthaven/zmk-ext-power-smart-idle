@@ -6,6 +6,7 @@
  * Skips ext-power idle timeout when USB is connected (charging).
  * On battery, auto-offs ext-power after ZMK idle timeout and restores on keypress.
  * Optionally clamps RGB brightness when on battery to reduce power draw.
+ * Optionally cuts LEDs entirely at a low battery threshold.
  * Toggles the ext-power GPIO pin directly to avoid flash writes on auto cycles.
  * Checks ext_power saved state to respect manual toggles (e.g. RGB_TOG, EP_TOG).
  */
@@ -24,6 +25,11 @@
 #include <zmk/rgb_underglow.h>
 #endif
 
+#if CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF > 0
+#include <zmk/battery.h>
+#include <zmk/events/battery_state_changed.h>
+#endif
+
 #define EXT_POWER_NODE DT_NODELABEL(ext_power)
 
 static const struct gpio_dt_spec ext_power_gpio =
@@ -32,6 +38,10 @@ static const struct gpio_dt_spec ext_power_gpio =
 static const struct device *ext_power_dev = DEVICE_DT_GET(EXT_POWER_NODE);
 
 static bool auto_off_active = false;
+
+#if CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF > 0
+static bool battery_cutoff_active = false;
+#endif
 
 #if IS_ENABLED(CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT)
 static bool brt_clamped = false;
@@ -66,6 +76,28 @@ static void update_state(void) {
     enum zmk_activity_state activity = zmk_activity_get_state();
     bool usb_powered = zmk_usb_is_powered();
 
+#if CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF > 0
+    uint8_t battery_level = zmk_battery_state_of_charge();
+    uint8_t cutoff = CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF;
+
+    if (!usb_powered && battery_level <= cutoff && battery_level > 0) {
+        /* Battery below cutoff while wireless - force LEDs off */
+        if (!battery_cutoff_active) {
+            if (device_is_ready(ext_power_dev) && ext_power_get(ext_power_dev)) {
+                gpio_pin_set_dt(&ext_power_gpio, 0);
+                battery_cutoff_active = true;
+                auto_off_active = true;
+            }
+        }
+        return;
+    }
+
+    if (battery_cutoff_active && (usb_powered || battery_level > cutoff)) {
+        battery_cutoff_active = false;
+        /* Fall through to normal logic to restore state */
+    }
+#endif
+
     if (activity == ZMK_ACTIVITY_ACTIVE || usb_powered) {
         /* Active or on USB - restore if we auto-offed */
         if (auto_off_active) {
@@ -98,3 +130,6 @@ static int ext_power_smart_idle_listener(const zmk_event_t *eh) {
 ZMK_LISTENER(ext_power_smart_idle, ext_power_smart_idle_listener);
 ZMK_SUBSCRIPTION(ext_power_smart_idle, zmk_activity_state_changed);
 ZMK_SUBSCRIPTION(ext_power_smart_idle, zmk_usb_conn_state_changed);
+#if CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF > 0
+ZMK_SUBSCRIPTION(ext_power_smart_idle, zmk_battery_state_changed);
+#endif

@@ -14,3 +14,15 @@ config ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT
       When USB is disconnected, RGB brightness is clamped to this value.
       The original brightness is restored when USB is reconnected.
       This only modifies runtime state - no flash writes occur.
+
+config ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF
+    int "Battery percentage at which LEDs turn off (0 to disable)"
+    depends on ZMK_EXT_POWER_SMART_IDLE
+    depends on ZMK_BATTERY
+    default 0
+    range 0 100
+    help
+      When on battery and the charge level drops to or below this value,
+      ext-power is turned off to preserve remaining battery for typing.
+      Power is restored when USB is connected or battery rises above
+      this threshold. Set to 0 to disable.
