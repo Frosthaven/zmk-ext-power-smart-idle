@@ -10,7 +10,7 @@ A ZMK module that makes your keyboard's LEDs smarter about battery life. It auto
 
 1. **Dims your LEDs** to a lower brightness (default 20%) so they use less energy
 2. **Turns LEDs off when you stop typing** (after the idle timeout, default 30 seconds) and turns them back on when you start again
-3. **Turns LEDs off at low battery** (optional, e.g. at 2.5%) to save the remaining power for typing
+3. **Turns LEDs off at low battery** (optional, e.g. at 3%) to save the remaining power for typing
 
 **When you plug USB back in**, full brightness is restored automatically.
 
@@ -66,9 +66,9 @@ CONFIG_ZMK_EXT_POWER_SMART_IDLE=y
 # Dim LEDs to 20% when on battery (requires CONFIG_ZMK_RGB_UNDERGLOW=y)
 CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT=20
 
-# Turn LEDs off when battery drops to 2.5% (requires CONFIG_ZMK_BATTERY=y)
+# Turn LEDs off when battery drops to 3% (requires CONFIG_ZMK_BATTERY=y)
 # Set to 0 to disable
-CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF=2
+CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF=3
 ```
 
 ### Step 3: Make sure ext-power is configured
@@ -122,7 +122,7 @@ Estimates below assume a split keyboard with 27 WS2812-compatible LEDs per half 
 | Mixed use, 30% typing | 11.4 hrs | 22.7 hrs |
 | LEDs off (idle/sleep) | 17.9 hrs | 35.7 hrs |
 
-With a 2.5% battery cutoff, you get roughly **25-30 minutes of additional typing time** after LEDs turn off (750mAh) or **50-60 minutes** (1500mAh), at ~15mA board-only draw.
+With a 3% battery cutoff, you get roughly **30-35 minutes of additional typing time** after LEDs turn off (750mAh) or **60-70 minutes** (1500mAh), at ~15mA board-only draw.
 
 ### Charging
 
