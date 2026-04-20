@@ -3,3 +3,14 @@ config ZMK_EXT_POWER_SMART_IDLE
     depends on ZMK_EXT_POWER
     depends on USB_DEVICE_STACK
     default n
+
+config ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT
+    int "Max RGB brightness (0-100) when on battery"
+    depends on ZMK_EXT_POWER_SMART_IDLE
+    depends on ZMK_RGB_UNDERGLOW
+    default 20
+    range 0 100
+    help
+      When USB is disconnected, RGB brightness is clamped to this value.
+      The original brightness is restored when USB is reconnected.
+      This only modifies runtime state - no flash writes occur.

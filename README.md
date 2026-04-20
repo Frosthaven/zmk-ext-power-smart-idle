@@ -1,6 +1,6 @@
 # zmk-ext-power-smart-idle
 
-A ZMK module that adds USB-aware ext-power idle behavior. External power stays on while USB is connected (charging) and auto-offs after the idle timeout when on battery.
+A ZMK module that adds USB-aware ext-power idle behavior. External power stays on while USB is connected (charging) and auto-offs after the idle timeout when on battery. Optionally clamps RGB brightness when on battery to reduce power draw.
 
 This is particularly useful for boards with RGB LEDs on a switched power rail, but works with any ext-power controlled peripheral.
 
@@ -8,11 +8,12 @@ This is particularly useful for boards with RGB LEDs on a switched power rail, b
 
 | Situation | Ext Power |
 |---|---|
-| Typing on battery | On |
+| Typing on battery | On (brightness clamped if configured) |
 | Idle on battery (after timeout) | **Off** (auto, resumes on keypress) |
-| Typing on USB | On |
-| Idle on USB | **On** (stays on indefinitely) |
-| Plug in USB while auto-offed | Restored immediately |
+| Typing on USB | On (full brightness) |
+| Idle on USB | **On** (stays on indefinitely, full brightness) |
+| Plug in USB while auto-offed | Restored immediately (full brightness) |
+| Unplug USB | Brightness clamped (if configured) |
 | Unplug USB while idle | Off (auto) |
 | Manual ext power toggle off | Off (module respects this and won't override) |
 | Reboot after auto-off | Restores last manual toggle state |
@@ -27,7 +28,7 @@ When both events indicate "idle + no USB," the module toggles the ext-power GPIO
 
 ### No Flash Writes
 
-The module toggles the ext-power GPIO pin directly instead of using ZMK's ext_power API. This means **zero flash writes** during auto idle/wake cycles, preserving flash endurance. Only manual toggles (like `RGB_TOG` with `CONFIG_ZMK_RGB_UNDERGLOW_EXT_POWER=y`, or `&ext_power EP_TOG`) save state to flash via ZMK's built-in behavior.
+The module toggles the ext-power GPIO pin directly instead of using ZMK's ext_power API. Brightness clamping uses `zmk_rgb_underglow_set_hsb()` which only modifies runtime state. This means **zero flash writes** during auto idle/wake cycles and brightness changes, preserving flash endurance. Only manual toggles (like `RGB_TOG` with `CONFIG_ZMK_RGB_UNDERGLOW_EXT_POWER=y`, or `&ext_power EP_TOG`) save state to flash via ZMK's built-in behavior.
 
 ### Respects Manual Toggle
 
@@ -74,6 +75,9 @@ CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_IDLE=n
 
 # Enable smart idle
 CONFIG_ZMK_EXT_POWER_SMART_IDLE=y
+
+# Optional: clamp RGB brightness to 20% when on battery (requires CONFIG_ZMK_RGB_UNDERGLOW=y)
+CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT=20
 ```
 
 ### Idle Timeout

@@ -5,6 +5,7 @@
  * Smart ext-power idle module for ZMK.
  * Skips ext-power idle timeout when USB is connected (charging).
  * On battery, auto-offs ext-power after ZMK idle timeout and restores on keypress.
+ * Optionally clamps RGB brightness when on battery to reduce power draw.
  * Toggles the ext-power GPIO pin directly to avoid flash writes on auto cycles.
  * Checks ext_power saved state to respect manual toggles (e.g. RGB_TOG, EP_TOG).
  */
@@ -19,6 +20,10 @@
 #include <zmk/events/activity_state_changed.h>
 #include <zmk/events/usb_conn_state_changed.h>
 
+#if IS_ENABLED(CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT)
+#include <zmk/rgb_underglow.h>
+#endif
+
 #define EXT_POWER_NODE DT_NODELABEL(ext_power)
 
 static const struct gpio_dt_spec ext_power_gpio =
@@ -27,6 +32,35 @@ static const struct gpio_dt_spec ext_power_gpio =
 static const struct device *ext_power_dev = DEVICE_DT_GET(EXT_POWER_NODE);
 
 static bool auto_off_active = false;
+
+#if IS_ENABLED(CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT)
+static bool brt_clamped = false;
+static uint8_t saved_brt = 0;
+
+static void clamp_brightness(void) {
+    if (brt_clamped) {
+        return;
+    }
+    struct zmk_led_hsb hsb = zmk_rgb_underglow_calc_brt(0);
+    uint8_t cap = CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT;
+    if (hsb.b > cap) {
+        saved_brt = hsb.b;
+        hsb.b = cap;
+        zmk_rgb_underglow_set_hsb(hsb);
+        brt_clamped = true;
+    }
+}
+
+static void restore_brightness(void) {
+    if (!brt_clamped) {
+        return;
+    }
+    struct zmk_led_hsb hsb = zmk_rgb_underglow_calc_brt(0);
+    hsb.b = saved_brt;
+    zmk_rgb_underglow_set_hsb(hsb);
+    brt_clamped = false;
+}
+#endif
 
 static void update_state(void) {
     enum zmk_activity_state activity = zmk_activity_get_state();
@@ -38,6 +72,13 @@ static void update_state(void) {
             gpio_pin_set_dt(&ext_power_gpio, 1);
             auto_off_active = false;
         }
+#if IS_ENABLED(CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT)
+        if (usb_powered) {
+            restore_brightness();
+        } else {
+            clamp_brightness();
+        }
+#endif
     } else if (activity == ZMK_ACTIVITY_IDLE && !usb_powered) {
         /* On battery + idle - auto-off if user has ext-power on */
         if (!auto_off_active) {
