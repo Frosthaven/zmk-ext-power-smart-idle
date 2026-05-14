@@ -21,7 +21,7 @@
 #include <zmk/events/activity_state_changed.h>
 #include <zmk/events/usb_conn_state_changed.h>
 
-#if IS_ENABLED(CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT)
+#if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW)
 #include <zmk/rgb_underglow.h>
 #endif
 
@@ -136,4 +136,28 @@ ZMK_SUBSCRIPTION(ext_power_smart_idle, zmk_activity_state_changed);
 ZMK_SUBSCRIPTION(ext_power_smart_idle, zmk_usb_conn_state_changed);
 #if CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF > 0
 ZMK_SUBSCRIPTION(ext_power_smart_idle, zmk_battery_state_changed);
+#endif
+
+#if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW)
+/* ZMK's RGB_UNDERGLOW_ON_START sets internal state to "on" and starts the LED
+ * tick, but does not call ext_power_enable() at boot. Mirror RGB on/off into
+ * ext-power at startup so the rail actually has voltage when the firmware
+ * thinks RGB is on. */
+static int ext_power_smart_idle_sync_at_boot(void) {
+    bool rgb_on = false;
+    if (zmk_rgb_underglow_get_state(&rgb_on) != 0) {
+        return 0;
+    }
+    if (!device_is_ready(ext_power_dev)) {
+        return 0;
+    }
+    int ext_on = ext_power_get(ext_power_dev);
+    if (rgb_on && ext_on == 0) {
+        ext_power_enable(ext_power_dev);
+    } else if (!rgb_on && ext_on > 0) {
+        ext_power_disable(ext_power_dev);
+    }
+    return 0;
+}
+SYS_INIT(ext_power_smart_idle_sync_at_boot, APPLICATION, 91);
 #endif
