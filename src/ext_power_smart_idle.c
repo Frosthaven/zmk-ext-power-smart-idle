@@ -30,7 +30,11 @@
 #include <zmk/events/battery_state_changed.h>
 #endif
 
-#define EXT_POWER_NODE DT_NODELABEL(ext_power)
+#define EXT_POWER_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(zmk_ext_power_generic)
+
+#if !DT_NODE_HAS_STATUS(EXT_POWER_NODE, okay)
+#error "no enabled zmk,ext-power-generic node"
+#endif
 
 static const struct gpio_dt_spec ext_power_gpio =
     GPIO_DT_SPEC_GET(EXT_POWER_NODE, control_gpios);
