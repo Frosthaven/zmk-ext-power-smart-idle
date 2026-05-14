@@ -43,6 +43,12 @@ static const struct device *ext_power_dev = DEVICE_DT_GET(EXT_POWER_NODE);
 
 static bool auto_off_active = false;
 
+/* Prevent auto-off during the brief window after boot, before USB has been
+ * detected as powered. Without this, the listener can fire on the very first
+ * activity_state_changed event (with usb_powered=false) and shut the MOSFET
+ * off the moment we just enabled it in sync_at_boot. */
+static bool active_state_seen = false;
+
 #if CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF > 0
 static bool battery_cutoff_active = false;
 #endif
@@ -103,6 +109,7 @@ static void update_state(void) {
 #endif
 
     if (activity == ZMK_ACTIVITY_ACTIVE || usb_powered) {
+        active_state_seen = true;
         /* Active or on USB - restore if we auto-offed */
         if (auto_off_active) {
             gpio_pin_set_dt(&ext_power_gpio, 1);
@@ -115,8 +122,10 @@ static void update_state(void) {
             clamp_brightness();
         }
 #endif
-    } else if (activity == ZMK_ACTIVITY_IDLE && !usb_powered) {
-        /* On battery + idle - auto-off if user has ext-power on */
+    } else if (activity == ZMK_ACTIVITY_IDLE && !usb_powered && active_state_seen) {
+        /* On battery + idle - auto-off if user has ext-power on. Skipped until
+         * we've observed at least one ACTIVE state, so a boot-time IDLE event
+         * (fired before USB enumeration completes) doesn't shut us off. */
         if (!auto_off_active) {
             if (device_is_ready(ext_power_dev) && ext_power_get(ext_power_dev)) {
                 gpio_pin_set_dt(&ext_power_gpio, 0);
