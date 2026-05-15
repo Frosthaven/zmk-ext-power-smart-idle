@@ -90,6 +90,22 @@ Your board overlay needs an `ext-power` node. Most boards with RGB already have 
 };
 ```
 
+### Step 4: Wire the LEDs through a MOSFET gated by the ext-power GPIO
+
+This is a hardware requirement that's easy to miss. For the auto-off behaviour to actually save power, the LED chain's VCC must come from a **gated rail**, not directly from the board's VCC/BAT+. The typical wiring is:
+
+```
+BAT+ (or VCC) -> P-MOSFET source
+ext-power GPIO -> MOSFET gate (active-low pulls gate low, MOSFET conducts)
+MOSFET drain -> LED_PWR rail -> LED VCC pins
+```
+
+When the module turns ext-power off, the GPIO goes high, the gate is pulled to source, the MOSFET stops conducting, and the LED rail drops to 0V. **No current flows to the LEDs.**
+
+If you wire LED VCC directly to the board's VCC or BAT+ (no MOSFET), the module's brightness clamping still works (it changes the color data the LEDs receive), but the auto-off does nothing useful: the GPIO toggles but the LEDs keep their power. You won't get the idle/cutoff power savings.
+
+The nice!nano v2 has its own built-in P-channel MOSFET on its `BAT+` pin controlled by its `RGB_EN` GPIO. If you're using that, ext-power's `control-gpios` should point at whichever pin you've wired to the MOSFET gate.
+
 ### Changing the Idle Timeout
 
 By default, ZMK considers you "idle" after 30 seconds of no keypresses. You can change this:
@@ -98,7 +114,9 @@ By default, ZMK considers you "idle" after 30 seconds of no keypresses. You can 
 CONFIG_ZMK_IDLE_TIMEOUT=60000
 ```
 
-The value is in milliseconds (60000 = 1 minute). This is a system-wide ZMK setting that also affects deep sleep countdown and feeds both the on-battery auto-off and the optional USB inactivity timeout in this module.
+The value is in milliseconds (60000 = 1 minute). This is a system-wide ZMK setting that also affects deep sleep countdown.
+
+`ZMK_IDLE_TIMEOUT` is what triggers ZMK's transition from ACTIVE to IDLE. This module reacts to that transition: on battery it auto-offs immediately, on USB it starts the separate `USB_TIMEOUT_S` countdown. So the total time from your last keypress to LEDs-off on USB is `ZMK_IDLE_TIMEOUT + USB_TIMEOUT_S` (with defaults, that's 30s + 7200s = about 2 hours).
 
 ## Configuration Reference
 
