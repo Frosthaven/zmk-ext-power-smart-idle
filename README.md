@@ -1,15 +1,15 @@
 # zmk-ext-power-smart-idle
 
-A ZMK module that makes your keyboard's LEDs smarter about battery life. It automatically manages LED power based on whether you're plugged in, typing, or idle — so you get the best experience without manually toggling things.
+A ZMK module that makes your keyboard's LEDs smarter about battery life. It automatically manages LED power based on whether you're plugged in, typing, or idle, so you get the best experience without manually toggling things.
 
 ## What It Does
 
-**When plugged in via USB**, your LEDs stay on at full brightness all the time. No need to worry about battery.
+**When plugged in via USB**, your LEDs stay on at full brightness. Optionally, you can configure an inactivity timeout so the LEDs auto-off after a long stretch of idle (e.g. 2 hours), and switch back on as soon as you type again.
 
 **When on battery**, the module does three things to save power:
 
 1. **Dims your LEDs** to a lower brightness (default 20%) so they use less energy
-2. **Turns LEDs off when you stop typing** (after the idle timeout, default 30 seconds) and turns them back on when you start again
+2. **Turns LEDs off when you stop typing** (after the ZMK idle timeout, default 30 seconds) and turns them back on when you start again
 3. **Turns LEDs off at low battery** (optional, e.g. at 5%) to save the remaining power for typing
 
 **When you plug USB back in**, full brightness is restored automatically.
@@ -22,6 +22,7 @@ The module also respects your manual toggles. If you turn LEDs off yourself, it 
 |---|---|
 | Typing, plugged in | On, full brightness |
 | Idle, plugged in | On, full brightness |
+| Idle, plugged in, past USB timeout (if configured) | Off (auto-restores on keypress) |
 | Typing, on battery | On, dimmed (e.g. 20%) |
 | Idle, on battery | Off (auto-restores on keypress) |
 | Low battery (if configured) | Off (auto-restores when plugged in) |
@@ -64,11 +65,16 @@ CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_IDLE=n
 CONFIG_ZMK_EXT_POWER_SMART_IDLE=y
 
 # Dim LEDs to 20% when on battery (requires CONFIG_ZMK_RGB_UNDERGLOW=y)
+# Set to 0 to disable brightness clamping
 CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT=20
 
 # Turn LEDs off when battery drops to 5% (requires CONFIG_ZMK_BATTERY=y)
 # Set to 0 to disable
 CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF=5
+
+# Optional: auto-off ext-power after 2 hours of idle even on USB
+# Set to 0 to keep LEDs on indefinitely while plugged in
+CONFIG_ZMK_EXT_POWER_SMART_IDLE_USB_TIMEOUT_S=7200
 ```
 
 ### Step 3: Make sure ext-power is configured
@@ -92,15 +98,16 @@ By default, ZMK considers you "idle" after 30 seconds of no keypresses. You can 
 CONFIG_ZMK_IDLE_TIMEOUT=60000
 ```
 
-The value is in milliseconds (60000 = 1 minute). This is a system-wide ZMK setting that also affects deep sleep countdown.
+The value is in milliseconds (60000 = 1 minute). This is a system-wide ZMK setting that also affects deep sleep countdown and feeds both the on-battery auto-off and the optional USB inactivity timeout in this module.
 
 ## Configuration Reference
 
 | Setting | Default | Description |
 |---|---|---|
 | `CONFIG_ZMK_EXT_POWER_SMART_IDLE` | `n` | Enable the module |
-| `CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT` | `20` | Max LED brightness (0-100) when on battery. Requires `CONFIG_ZMK_RGB_UNDERGLOW=y` |
-| `CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF` | `0` | Battery % at which LEDs turn off completely. 0 = disabled. Requires `CONFIG_ZMK_BATTERY=y` |
+| `CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT` | `20` | Max LED brightness (0-100) when on battery. 0 disables the clamp. Requires `CONFIG_ZMK_RGB_UNDERGLOW=y` |
+| `CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF` | `0` | Battery % at which LEDs turn off completely. 0 disables. Requires `CONFIG_ZMK_BATTERY=y` |
+| `CONFIG_ZMK_EXT_POWER_SMART_IDLE_USB_TIMEOUT_S` | `0` | Seconds of idle on USB before ext-power auto-offs. 0 keeps LEDs on indefinitely while plugged in. Restored on the next ACTIVE state |
 
 ## Requirements
 
@@ -122,7 +129,7 @@ With a 5% battery cutoff, LEDs run until the battery drops to 5%, then turn off 
 | 20% single color, always on | 5.8 hrs | 2.5 hrs | 11.6 hrs | 5 hrs |
 | Mixed use, 50% typing | 8.6 hrs | 2.5 hrs | 17.2 hrs | 5 hrs |
 | Mixed use, 30% typing | 10.8 hrs | 2.5 hrs | 21.6 hrs | 5 hrs |
-| LEDs off (idle/sleep) | — | 17.9 hrs | — | 35.7 hrs |
+| LEDs off (idle/sleep) | n/a | 17.9 hrs | n/a | 35.7 hrs |
 
 The "after cutoff" column is typing time remaining at ~15mA board-only draw once LEDs shut off.
 
@@ -148,11 +155,11 @@ At 100mA, the charger is slower than the LED draw at full brightness, so the bat
 ### How It Works
 
 The module listens for three ZMK events:
-- **Activity state changes** (idle/active) - triggered by ZMK's idle timeout
+- **Activity state changes** (idle/active), triggered by ZMK's idle timeout
 - **USB connection changes** (plugged/unplugged)
 - **Battery level changes** (if cutoff is enabled)
 
-When conditions change, it evaluates the combined state and decides whether to turn LEDs on/off or adjust brightness.
+When conditions change, it evaluates the combined state and decides whether to turn LEDs on/off or adjust brightness. The optional USB inactivity timeout uses a delayable work item that gets scheduled when activity transitions to idle on USB and cancelled when it returns to active.
 
 ### No Flash Writes
 
@@ -169,3 +176,5 @@ On split keyboards, each half checks its own USB state independently. If only on
 ## License
 
 MIT
+</content>
+</invoke>
