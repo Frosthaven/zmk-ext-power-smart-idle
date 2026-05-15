@@ -40,7 +40,7 @@ ZMK EXT_POWER GPIO -> MOSFET gate
 MOSFET drain       -> LED VCC rail
 ```
 
-The MOSFET used in the reference Corne Eclipse design is the [AOS AO3401A (LCSC C15127)](https://www.lcsc.com/product-detail/MOSFET_Alpha-Omega-Semicon-AOS_AO3401A_C15127.html). Any P-channel SOT-23 MOSFET with similar specs works.
+Any P-channel SOT-23 MOSFET with similar specs to [AOS AO3401A (LCSC C15127)](https://www.lcsc.com/product-detail/MOSFET_Alpha-Omega-Semicon-AOS_AO3401A_C15127.html) works.
 
 If you wire LED VCC directly to a power rail with no MOSFET, the brightness clamp still works (it just changes the color data), but the idle / battery-cutoff / USB-timeout auto-offs cannot cut power and are effectively no-ops.
 
