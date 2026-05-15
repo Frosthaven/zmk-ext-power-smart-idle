@@ -132,40 +132,6 @@ ZMK fires its IDLE event after `ZMK_IDLE_TIMEOUT`. On battery the module auto-of
 - `CONFIG_ZMK_RGB_UNDERGLOW=y` needed for brightness clamping (optional otherwise)
 - `CONFIG_ZMK_BATTERY=y` needed for low battery cutoff (optional otherwise)
 
-## Battery Life Estimates
-
-Estimates below assume a split keyboard with 27 WS2812-compatible LEDs per half (6 underglow + 21 per-key), ~15mA base board draw, `CONFIG_ZMK_RGB_UNDERGLOW_BRT_MAX=50`, and brightness clamped to 20% on battery. All figures are per half.
-
-### Wireless (per half, with 5% battery cutoff)
-
-With a 5% battery cutoff, LEDs run until the battery drops to 5%, then turn off to preserve typing time.
-
-| Scenario | 750mAh (LEDs on) | 750mAh (after cutoff) | 1500mAh (LEDs on) | 1500mAh (after cutoff) |
-|---|---|---|---|---|
-| 20% single color, always on | 5.8 hrs | 2.5 hrs | 11.6 hrs | 5 hrs |
-| Mixed use, 50% typing | 8.6 hrs | 2.5 hrs | 17.2 hrs | 5 hrs |
-| Mixed use, 30% typing | 10.8 hrs | 2.5 hrs | 21.6 hrs | 5 hrs |
-| LEDs off (idle/sleep) | n/a | 17.9 hrs | n/a | 35.7 hrs |
-
-The "after cutoff" column is typing time remaining at ~15mA board-only draw once LEDs shut off.
-
-### Charging
-
-The nice!nano v2 charges at 100mA by default. Soldering the charge rate jumper on the nice!nano v2 increases the charge rate to 500mA.
-
-| Battery | @ 100mA | @ 500mA |
-|---|---|---|
-| 750mAh | ~7.5 hrs | ~1.5 hrs |
-| 1500mAh (2x parallel) | ~15 hrs | ~3 hrs |
-
-At 100mA, the charger is slower than the LED draw at full brightness, so the battery will slowly drain even while plugged in. At 500mA, the board charges even with LEDs on at full brightness.
-
-| LED State (27 LEDs) | Draw | Net @ 100mA | Net @ 500mA |
-|---|---|---|---|
-| 50% single color | 285mA | -185mA (drain) | +215mA (charge) |
-| 20% single color | 123mA | -23mA (drain) | +377mA (charge) |
-| LEDs off | 42mA | +58mA (charge) | +458mA (charge) |
-
 ## Technical Details
 
 ### How It Works
