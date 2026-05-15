@@ -114,7 +114,7 @@ CONFIG_ZMK_IDLE_TIMEOUT=60000
 
 The value is in milliseconds (60000 = 1 minute). This is a system-wide ZMK setting that also affects deep sleep countdown.
 
-`ZMK_IDLE_TIMEOUT` is what triggers ZMK's transition from ACTIVE to IDLE. This module reacts to that transition: on battery it auto-offs immediately, on USB it starts the separate `USB_TIMEOUT_S` countdown. So the total time from your last keypress to LEDs-off on USB is `ZMK_IDLE_TIMEOUT + USB_TIMEOUT_S` (with defaults, that's 30s + 7200s = about 2 hours).
+ZMK fires its IDLE event after `ZMK_IDLE_TIMEOUT`. On battery the module auto-offs immediately at that point. On USB it then starts the separate `USB_TIMEOUT_S` countdown, so the total wait on USB is `ZMK_IDLE_TIMEOUT + USB_TIMEOUT_S` (defaults: 30s + 7200s ≈ 2 hours).
 
 ## Configuration Reference
 
