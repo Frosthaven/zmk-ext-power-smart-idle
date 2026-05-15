@@ -35,9 +35,9 @@ The module also respects your manual toggles. If you turn LEDs off yourself, it 
 For auto-off to actually cut power, the LED chain's VCC must go through a P-channel MOSFET that the ZMK GPIO can switch off. Wire it like this:
 
 ```
-VCC (or BAT+) -> MOSFET source
-ZMK GPIO       -> MOSFET gate
-MOSFET drain  -> LED VCC rail
+VCC          -> MOSFET source
+ZMK GPIO     -> MOSFET gate
+MOSFET drain -> LED VCC rail
 ```
 
 The MOSFET used in the reference Corne Eclipse design is the [AOS AO3401A (LCSC C15127)](https://www.lcsc.com/product-detail/MOSFET_Alpha-Omega-Semicon-AOS_AO3401A_C15127.html). Any P-channel SOT-23 MOSFET with similar specs works.
