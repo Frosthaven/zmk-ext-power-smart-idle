@@ -53,16 +53,93 @@ static bool active_state_seen = false;
 static bool battery_cutoff_active = false;
 #endif
 
+/* Idle-driven ext-power off path. When fade is enabled, linearly fade RGB
+ * brightness from current to 0 over FADE_MS, then cut the MOSFET. When fade
+ * is disabled (or RGB underglow is not present), cut the MOSFET immediately.
+ * In both cases cancel_fade_and_restore() restores pre-fade brightness on
+ * wake without touching the persisted (NVS) brightness setting. */
+#if CONFIG_ZMK_EXT_POWER_SMART_IDLE_FADE_MS > 0
+
+#define FADE_STEP_MS 50
+
+static bool fade_active = false;
+static uint8_t fade_start_brt = 0;
+static int64_t fade_start_time = 0;
+
+static void fade_step_handler(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(fade_work, fade_step_handler);
+
+static void start_fade_off(void) {
+    if (fade_active) {
+        return;
+    }
+    if (!device_is_ready(ext_power_dev) || !ext_power_get(ext_power_dev)) {
+        return;
+    }
+    struct zmk_led_hsb hsb = zmk_rgb_underglow_calc_brt(0);
+    if (hsb.b == 0) {
+        /* Nothing to fade - cut the MOSFET immediately. */
+        gpio_pin_set_dt(&ext_power_gpio, 0);
+        auto_off_active = true;
+        return;
+    }
+    fade_start_brt = hsb.b;
+    fade_start_time = k_uptime_get();
+    fade_active = true;
+    k_work_schedule(&fade_work, K_NO_WAIT);
+}
+
+static void cancel_fade_and_restore(void) {
+    if (!fade_active) {
+        return;
+    }
+    k_work_cancel_delayable(&fade_work);
+    struct zmk_led_hsb hsb = zmk_rgb_underglow_calc_brt(0);
+    hsb.b = fade_start_brt;
+    zmk_rgb_underglow_set_hsb(hsb);
+    fade_active = false;
+}
+
+static void fade_step_handler(struct k_work *work) {
+    int64_t elapsed = k_uptime_get() - fade_start_time;
+    struct zmk_led_hsb hsb = zmk_rgb_underglow_calc_brt(0);
+
+    if (elapsed >= CONFIG_ZMK_EXT_POWER_SMART_IDLE_FADE_MS) {
+        /* Fade complete - cut MOSFET. fade_active stays true so a wake
+         * restores brightness; cleared in cancel_fade_and_restore. */
+        hsb.b = 0;
+        zmk_rgb_underglow_set_hsb(hsb);
+        gpio_pin_set_dt(&ext_power_gpio, 0);
+        auto_off_active = true;
+        return;
+    }
+
+    uint32_t remaining = (uint32_t)(CONFIG_ZMK_EXT_POWER_SMART_IDLE_FADE_MS - elapsed);
+    hsb.b = (uint8_t)((uint32_t)fade_start_brt * remaining /
+                      CONFIG_ZMK_EXT_POWER_SMART_IDLE_FADE_MS);
+    zmk_rgb_underglow_set_hsb(hsb);
+    k_work_schedule(&fade_work, K_MSEC(FADE_STEP_MS));
+}
+
+#else /* fade disabled - keep the original instant-off path. */
+
+static inline void start_fade_off(void) {
+    if (device_is_ready(ext_power_dev) && ext_power_get(ext_power_dev)) {
+        gpio_pin_set_dt(&ext_power_gpio, 0);
+        auto_off_active = true;
+    }
+}
+static inline void cancel_fade_and_restore(void) {}
+
+#endif /* CONFIG_ZMK_EXT_POWER_SMART_IDLE_FADE_MS > 0 */
+
 #if CONFIG_ZMK_EXT_POWER_SMART_IDLE_USB_TIMEOUT_S > 0
 static void usb_idle_off_handler(struct k_work *work) {
     /* Re-check state when timer fires - user may have come back or unplugged */
     if (!zmk_usb_is_powered() || zmk_activity_get_state() == ZMK_ACTIVITY_ACTIVE) {
         return;
     }
-    if (device_is_ready(ext_power_dev) && ext_power_get(ext_power_dev)) {
-        gpio_pin_set_dt(&ext_power_gpio, 0);
-        auto_off_active = true;
-    }
+    start_fade_off();
 }
 static K_WORK_DELAYABLE_DEFINE(usb_idle_off_work, usb_idle_off_handler);
 #endif
@@ -124,7 +201,10 @@ static void update_state(void) {
 
     if (activity == ZMK_ACTIVITY_ACTIVE || usb_powered) {
         active_state_seen = true;
-        /* Active or on USB - restore if we auto-offed */
+        /* Active or on USB - cancel any in-progress fade and restore the
+         * pre-fade brightness in runtime state before re-enabling MOSFET so
+         * the LEDs come back up at the brightness the user expects. */
+        cancel_fade_and_restore();
         if (auto_off_active) {
             gpio_pin_set_dt(&ext_power_gpio, 1);
             auto_off_active = false;
@@ -153,10 +233,7 @@ static void update_state(void) {
          * we've observed at least one ACTIVE state, so a boot-time IDLE event
          * (fired before USB enumeration completes) doesn't shut us off. */
         if (!auto_off_active) {
-            if (device_is_ready(ext_power_dev) && ext_power_get(ext_power_dev)) {
-                gpio_pin_set_dt(&ext_power_gpio, 0);
-                auto_off_active = true;
-            }
+            start_fade_off();
         }
     }
 }
