@@ -29,9 +29,35 @@ The module also respects your manual toggles. If you turn LEDs off yourself, it 
 | Low battery (if configured) | Fade to off over 2 s (auto-restores when plugged in or battery rises) |
 | You manually turned LEDs off | Off (module won't override you) |
 
+## Requirements
+
+### Required
+
+| Requirement | Why |
+|---|---|
+| `CONFIG_ZMK_EXT_POWER=y` with an `ext-power` devicetree node | The module toggles this node's GPIO to perform auto-off. |
+| `CONFIG_USB_DEVICE_STACK=y` | Needed to detect USB plug/unplug state. Enabled by default on nice!nano. |
+
+For split keyboards, both halves need these. The module runs independently on each side and each side evaluates its own activity, USB, and battery state. Putting these in the shared `config/<shield>.conf` is the easiest way to apply them to both halves at once.
+
+### Optional
+
+Each of these unlocks a related feature. The module degrades gracefully when any is missing: the rest of the behavior still works.
+
+| Optional | With it | Without it |
+|---|---|---|
+| **P-channel MOSFET on the LED rail** (gate driven by the `ext-power` GPIO) | Idle, low-battery, and USB-timeout auto-offs physically disconnect the LED rail. Zero drain when LEDs are off. | Auto-off paths become no-ops (the GPIO toggles but nothing breaks the rail), but the brightness clamp still works because it changes the color data ZMK pushes to the strip. |
+| `CONFIG_ZMK_RGB_UNDERGLOW=y` | Brightness clamp on battery and the fade-to-off transition apply. | Auto-off and battery cutoff still work; brightness clamp / fade are skipped. |
+| `CONFIG_ZMK_BATTERY=y` | Enables `BATTERY_CUTOFF` (LEDs fade off at a low battery threshold). | The cutoff feature is unavailable; everything else still works. |
+| **The [Frosthaven/zmk fork](https://github.com/Frosthaven/zmk) (branch `v0.3-peripheral-charging-bit`)** | Unlocks `SYNC_HALVES` (cross-half coordination on split keyboards) and `ENFORCE_BRT_CAP` (continuous brightness cap enforcement, not just on trigger events). | Those two options are hidden in Kconfig. The module runs as it always has: each half decides independently, and the cap is applied at trigger events only (USB plug, activity transition, battery change), so pressing RGB_BRI between events can transiently exceed the cap. |
+
+### Recommended P-channel MOSFET parts
+
+Any P-channel SOT-23 MOSFET with similar specs to [AOS AO3401A (LCSC C15127)](https://www.lcsc.com/product-detail/MOSFET_Alpha-Omega-Semicon-AOS_AO3401A_C15127.html) works. A 10kΩ pull-up resistor between the MOSFET gate and source (such as the [UNI-ROYAL 1206W4F1002T5E (LCSC C17902)](https://www.lcsc.com/product-detail/C17902.html)) is recommended for long term use.
+
 ## Setup
 
-### Step 1: Wire your LED rail through a MOSFET
+### Step 1: Wire your LED rail through a MOSFET (if you have one)
 
 For auto-off to actually cut power, the LED chain's VCC must go through a P-channel MOSFET that the ZMK GPIO can switch off. Wire it like this:
 
@@ -41,11 +67,7 @@ ZMK EXT_POWER GPIO -> MOSFET gate
 MOSFET drain       -> LED_POWER
 ```
 
-Any P-channel SOT-23 MOSFET with similar specs to [AOS AO3401A (LCSC C15127)](https://www.lcsc.com/product-detail/MOSFET_Alpha-Omega-Semicon-AOS_AO3401A_C15127.html) works.
-
-A 10kΩ pull-up resistor between the MOSFET gate and source (such as the [UNI-ROYAL 1206W4F1002T5E (LCSC C17902)](https://www.lcsc.com/product-detail/C17902.html)) is recommended for long term use.
-
-If you wire LED_POWER directly to a power rail with no MOSFET, the brightness clamp still works (it just changes the color data), but the idle / battery-cutoff / USB-timeout auto-offs cannot cut power and are effectively no-ops.
+If you skip the MOSFET, the rest of the setup still applies; only the auto-off paths become no-ops (see the Requirements table above).
 
 ### Step 2: Add the module to your `config/west.yml`
 
@@ -153,15 +175,6 @@ ZMK already ships this; no fork or smart-idle needed. Set
 USB disconnect (zero drain via the MOSFET) and auto-restored when USB
 is reconnected. Compose with smart-idle's `BATTERY_BRT=0` if you don't
 want a battery-time dim band.
-
-## Requirements
-
-- `CONFIG_ZMK_EXT_POWER=y` with an `ext-power` devicetree node
-- `CONFIG_USB_DEVICE_STACK=y` (enabled by default on nice!nano)
-- `CONFIG_ZMK_RGB_UNDERGLOW=y` needed for brightness clamping (optional otherwise)
-- `CONFIG_ZMK_BATTERY=y` needed for low battery cutoff (optional otherwise)
-
-For split keyboards, these are needed on **both** halves. The module runs independently on each side and each side evaluates its own activity, USB, and battery state. Putting them in the shared `config/<shield>.conf` is the easiest way to apply them to both halves at once.
 
 ## Technical Details
 
