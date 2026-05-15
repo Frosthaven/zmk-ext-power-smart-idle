@@ -42,7 +42,7 @@ MOSFET drain       -> LED_POWER
 
 Any P-channel SOT-23 MOSFET with similar specs to [AOS AO3401A (LCSC C15127)](https://www.lcsc.com/product-detail/MOSFET_Alpha-Omega-Semicon-AOS_AO3401A_C15127.html) works.
 
-A 10kΩ pull-up resistor to handle spikes such as the [UNI-ROYAL 1206W4F1002T5E (LCSC C17902)](https://www.lcsc.com/product-detail/C17902.html) is recommended for long term use.
+A 10kΩ pull-up resistor between the MOSFET gate and source (such as the [UNI-ROYAL 1206W4F1002T5E (LCSC C17902)](https://www.lcsc.com/product-detail/C17902.html)) is recommended for long term use.
 
 If you wire LED_POWER directly to a power rail with no MOSFET, the brightness clamp still works (it just changes the color data), but the idle / battery-cutoff / USB-timeout auto-offs cannot cut power and are effectively no-ops.
 
