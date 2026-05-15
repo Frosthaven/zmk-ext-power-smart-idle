@@ -8,7 +8,7 @@ A ZMK module that automatically manages your keyboard's external power rail and 
 
 **When on battery**, the module does three things to save power:
 
-1. **Dims your LEDs** to a lower brightness (default 20%) so they use less energy
+1. **Caps your LED brightness** at a lower value (default 20%) so they use less energy. Your saved brightness preference is preserved and restored when USB is reconnected
 2. **Turns LEDs off when you stop typing** (after the ZMK idle timeout, default 30 seconds) and turns them back on when you start again
 3. **Turns LEDs off at low battery** (optional, e.g. at 5%) to save the remaining power for typing
 
@@ -23,7 +23,7 @@ The module also respects your manual toggles. If you turn LEDs off yourself, it 
 | Typing, plugged in | On, full brightness |
 | Idle, plugged in | On, full brightness |
 | Idle, plugged in, past USB timeout (if configured) | Off (auto-restores on keypress) |
-| Typing, on battery | On, dimmed (e.g. 20%) |
+| Typing, on battery | On, capped (e.g. 20%) |
 | Idle, on battery | Off (auto-restores on keypress) |
 | Low battery (if configured) | Off (auto-restores when plugged in) |
 | You manually turned LEDs off | Off (module won't override you) |
@@ -91,7 +91,7 @@ CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_IDLE=n
 # Enable smart idle
 CONFIG_ZMK_EXT_POWER_SMART_IDLE=y
 
-# Dim LEDs to 20% when on battery (requires CONFIG_ZMK_RGB_UNDERGLOW=y)
+# Cap LED brightness at 20% when on battery (requires CONFIG_ZMK_RGB_UNDERGLOW=y)
 # Set to 0 to disable brightness clamping
 CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT=20
 
