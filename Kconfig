@@ -26,3 +26,15 @@ config ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF
       ext-power is turned off to preserve remaining battery for typing.
       Power is restored when USB is connected or battery rises above
       this threshold. Set to 0 to disable.
+
+config ZMK_EXT_POWER_SMART_IDLE_USB_TIMEOUT_S
+    int "Seconds of idle on USB before turning ext-power off (0 to disable)"
+    depends on ZMK_EXT_POWER_SMART_IDLE
+    default 0
+    help
+      When USB is connected and ZMK transitions to its IDLE activity state,
+      schedule an auto-off after this many seconds. Cancelled if activity
+      returns to ACTIVE or USB is disconnected before the timer fires.
+      Set to 0 to keep ext-power on indefinitely while USB is connected
+      (the original smart-idle behavior). Restored to ON when activity
+      returns to ACTIVE.

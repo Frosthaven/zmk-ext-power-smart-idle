@@ -53,6 +53,20 @@ static bool active_state_seen = false;
 static bool battery_cutoff_active = false;
 #endif
 
+#if CONFIG_ZMK_EXT_POWER_SMART_IDLE_USB_TIMEOUT_S > 0
+static void usb_idle_off_handler(struct k_work *work) {
+    /* Re-check state when timer fires - user may have come back or unplugged */
+    if (!zmk_usb_is_powered() || zmk_activity_get_state() == ZMK_ACTIVITY_ACTIVE) {
+        return;
+    }
+    if (device_is_ready(ext_power_dev) && ext_power_get(ext_power_dev)) {
+        gpio_pin_set_dt(&ext_power_gpio, 0);
+        auto_off_active = true;
+    }
+}
+static K_WORK_DELAYABLE_DEFINE(usb_idle_off_work, usb_idle_off_handler);
+#endif
+
 #if IS_ENABLED(CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT)
 static bool brt_clamped = false;
 static uint8_t saved_brt = 0;
@@ -115,6 +129,18 @@ static void update_state(void) {
             gpio_pin_set_dt(&ext_power_gpio, 1);
             auto_off_active = false;
         }
+#if CONFIG_ZMK_EXT_POWER_SMART_IDLE_USB_TIMEOUT_S > 0
+        if (activity == ZMK_ACTIVITY_ACTIVE) {
+            /* User active - cancel any pending USB-idle countdown */
+            k_work_cancel_delayable(&usb_idle_off_work);
+        } else if (usb_powered && activity == ZMK_ACTIVITY_IDLE) {
+            /* USB plugged + idle - start countdown to auto-off.
+             * k_work_schedule is a no-op if already scheduled, so repeated
+             * events while idle don't reset the timer. */
+            k_work_schedule(&usb_idle_off_work,
+                            K_SECONDS(CONFIG_ZMK_EXT_POWER_SMART_IDLE_USB_TIMEOUT_S));
+        }
+#endif
 #if IS_ENABLED(CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT)
         if (usb_powered) {
             restore_brightness();
