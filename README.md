@@ -1,6 +1,6 @@
 # zmk-ext-power-smart-idle
 
-A ZMK module that makes your keyboard's LEDs smarter about battery life. It automatically manages LED power based on whether you're plugged in, typing, or idle, so you get the best experience without manually toggling things.
+A ZMK module that automatically manages your keyboard's external power rail and RGB brightness for longer battery life. It reacts to USB connection, typing, idle, and low battery, so you get the best experience without manually toggling things.
 
 ## What It Does
 
