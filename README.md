@@ -30,7 +30,21 @@ The module also respects your manual toggles. If you turn LEDs off yourself, it 
 
 ## Setup
 
-### Step 1: Add the module to your `config/west.yml`
+### Step 1: Wire your LED rail through a MOSFET
+
+For auto-off to actually cut power, the LED chain's VCC must go through a P-channel MOSFET that the ZMK GPIO can switch off. Wire it like this:
+
+```
+VCC (or BAT+) -> MOSFET source
+ZMK GPIO       -> MOSFET gate
+MOSFET drain  -> LED VCC rail
+```
+
+The MOSFET used in the reference Corne Eclipse design is the [AOS AO3401A (LCSC C15127)](https://www.lcsc.com/product-detail/MOSFET_Alpha-Omega-Semicon-AOS_AO3401A_C15127.html). Any P-channel SOT-23 MOSFET with similar specs works.
+
+If you wire LED VCC directly to a power rail with no MOSFET, the brightness clamp still works (it just changes the color data), but the idle / battery-cutoff / USB-timeout auto-offs cannot cut power and are effectively no-ops.
+
+### Step 2: Add the module to your `config/west.yml`
 
 Add the `frosthaven` remote and the `zmk-ext-power-smart-idle` project to your manifest. Here's a minimal example:
 
@@ -53,7 +67,20 @@ manifest:
     path: config
 ```
 
-### Step 2: Update your `.conf` file
+### Step 3: Make sure ext-power is configured
+
+Your board overlay needs an `ext-power` node pointing at the GPIO that drives the MOSFET gate from Step 1. Most boards with RGB already have this. If not, add it:
+
+```dts
+/ {
+    ext-power {
+        compatible = "zmk,ext-power-generic";
+        control-gpios = <&gpio0 10 GPIO_ACTIVE_LOW>;
+    };
+};
+```
+
+### Step 4: Update your `.conf` file
 
 Add these lines to your shield's `.conf` file:
 
@@ -76,35 +103,6 @@ CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF=5
 # Set to 0 to keep LEDs on indefinitely while plugged in
 CONFIG_ZMK_EXT_POWER_SMART_IDLE_USB_TIMEOUT_S=7200
 ```
-
-### Step 3: Make sure ext-power is configured
-
-Your board overlay needs an `ext-power` node. Most boards with RGB already have this. If not, add it:
-
-```dts
-/ {
-    ext-power {
-        compatible = "zmk,ext-power-generic";
-        control-gpios = <&gpio0 10 GPIO_ACTIVE_LOW>;
-    };
-};
-```
-
-### Step 4: Wire the LEDs through a MOSFET gated by the ext-power GPIO
-
-This is a hardware requirement that's easy to miss. For the auto-off behaviour to actually save power, the LED chain's VCC must come from a **gated rail**, not directly from the board's VCC/BAT+. The typical wiring is:
-
-```
-BAT+ (or VCC) -> P-MOSFET source
-ext-power GPIO -> MOSFET gate (active-low pulls gate low, MOSFET conducts)
-MOSFET drain -> LED_PWR rail -> LED VCC pins
-```
-
-When the module turns ext-power off, the GPIO goes high, the gate is pulled to source, the MOSFET stops conducting, and the LED rail drops to 0V. **No current flows to the LEDs.**
-
-If you wire LED VCC directly to the board's VCC or BAT+ (no MOSFET), the module's brightness clamping still works (it changes the color data the LEDs receive), but the auto-off does nothing useful: the GPIO toggles but the LEDs keep their power. You won't get the idle/cutoff power savings.
-
-The nice!nano v2 has its own built-in P-channel MOSFET on its `BAT+` pin controlled by its `RGB_EN` GPIO. If you're using that, ext-power's `control-gpios` should point at whichever pin you've wired to the MOSFET gate.
 
 ### Changing the Idle Timeout
 
