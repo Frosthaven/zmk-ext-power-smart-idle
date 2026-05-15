@@ -132,6 +132,8 @@ ZMK fires its IDLE event after `ZMK_IDLE_TIMEOUT`. On battery the module auto-of
 - `CONFIG_ZMK_RGB_UNDERGLOW=y` needed for brightness clamping (optional otherwise)
 - `CONFIG_ZMK_BATTERY=y` needed for low battery cutoff (optional otherwise)
 
+For split keyboards, these are needed on **both** halves. The module runs independently on each side and each side evaluates its own activity, USB, and battery state. Putting them in the shared `config/<shield>.conf` is the easiest way to apply them to both halves at once.
+
 ## Technical Details
 
 ### How It Works
