@@ -67,7 +67,7 @@ static void usb_idle_off_handler(struct k_work *work) {
 static K_WORK_DELAYABLE_DEFINE(usb_idle_off_work, usb_idle_off_handler);
 #endif
 
-#if IS_ENABLED(CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT)
+#if CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT > 0
 static bool brt_clamped = false;
 static uint8_t saved_brt = 0;
 
@@ -141,7 +141,7 @@ static void update_state(void) {
                             K_SECONDS(CONFIG_ZMK_EXT_POWER_SMART_IDLE_USB_TIMEOUT_S));
         }
 #endif
-#if IS_ENABLED(CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT)
+#if CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT > 0
         if (usb_powered) {
             restore_brightness();
         } else {
