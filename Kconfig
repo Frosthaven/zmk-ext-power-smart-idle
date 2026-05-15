@@ -40,17 +40,15 @@ config ZMK_EXT_POWER_SMART_IDLE_USB_TIMEOUT_S
       returns to ACTIVE.
 
 config ZMK_EXT_POWER_SMART_IDLE_FADE_MS
-    int "Milliseconds to fade RGB brightness to zero before idle ext-power off"
+    int "Milliseconds to fade RGB brightness to zero before any auto-off"
     depends on ZMK_EXT_POWER_SMART_IDLE
     depends on ZMK_RGB_UNDERGLOW
     default 2000
     range 0 10000
     help
-      When idle triggers an auto-off (either the on-battery idle path or
-      the on-USB idle timeout), linearly fade RGB brightness from its
-      current value down to 0 over this many milliseconds, then cut the
-      ext-power MOSFET. Only modifies runtime brightness state - no flash
-      writes occur, and the pre-fade brightness is restored on wake. Set
-      to 0 to disable the fade and cut ext-power instantly (the original
-      behavior). The battery-cutoff event is not faded since it is a
-      low-battery protection trigger, not an idle event.
+      When any auto-off event fires (on-battery idle, on-USB idle timeout,
+      or battery cutoff), linearly fade RGB brightness from its current
+      value down to 0 over this many milliseconds, then cut the ext-power
+      MOSFET. Only modifies runtime brightness state - no flash writes
+      occur, and the pre-fade brightness is restored on wake. Set to 0 to
+      disable the fade and cut ext-power instantly (the original behavior).

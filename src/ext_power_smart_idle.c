@@ -182,13 +182,12 @@ static void update_state(void) {
     uint8_t cutoff = CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF;
 
     if (!usb_powered && battery_level <= cutoff && battery_level > 0) {
-        /* Battery below cutoff while wireless - force LEDs off */
+        /* Battery below cutoff while wireless - fade out, then cut MOSFET.
+         * The fade uses the same FADE_MS setting as the idle paths so the
+         * user gets a consistent visual cue for any auto-off event. */
         if (!battery_cutoff_active) {
-            if (device_is_ready(ext_power_dev) && ext_power_get(ext_power_dev)) {
-                gpio_pin_set_dt(&ext_power_gpio, 0);
-                battery_cutoff_active = true;
-                auto_off_active = true;
-            }
+            battery_cutoff_active = true;
+            start_fade_off();
         }
         return;
     }

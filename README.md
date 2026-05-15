@@ -12,7 +12,7 @@ A ZMK module that automatically manages your keyboard's external power rail and 
 2. **Turns LEDs off when you stop typing** (after the ZMK idle timeout, default 30 seconds) and turns them back on when you start again
 3. **Turns LEDs off at low battery** (optional, e.g. at 5%) to save the remaining power for typing
 
-**Idle auto-off fades smoothly.** Instead of cutting the LEDs the instant idle is reached, the module linearly fades brightness from its current value down to 0 over 2 seconds (configurable), then cuts the MOSFET. This applies to both the on-battery idle path and the on-USB idle timeout. The pre-fade brightness is stored in RAM only and restored the moment activity resumes (no flash writes, your saved brightness preference is untouched). If you unplug USB while the device is already idle, the fade is what runs, so the lights ramp down rather than blinking off.
+**Auto-off fades smoothly.** Instead of cutting the LEDs the instant any auto-off event is reached, the module linearly fades brightness from its current value down to 0 over 2 seconds (configurable), then cuts the MOSFET. This applies to every auto-off path: the on-battery idle, the on-USB idle timeout, the unplug-while-idle case, and the battery cutoff. The pre-fade brightness is stored in RAM only and restored the moment conditions change (no flash writes, your saved brightness preference is untouched).
 
 The module also respects your manual toggles. If you turn LEDs off yourself, it won't fight you and turn them back on.
 
@@ -26,7 +26,7 @@ The module also respects your manual toggles. If you turn LEDs off yourself, it 
 | Typing, on battery | On, capped (e.g. 20%) |
 | Idle, on battery | Fade to off over 2 s (auto-restores on keypress) |
 | Unplugged USB while idle | Same 2 s fade to off, no instant cut |
-| Low battery (if configured) | Off immediately (auto-restores when plugged in) |
+| Low battery (if configured) | Fade to off over 2 s (auto-restores when plugged in or battery rises) |
 | You manually turned LEDs off | Off (module won't override you) |
 
 ## Setup
@@ -153,7 +153,7 @@ The module listens for three ZMK events:
 
 When conditions change, it evaluates the combined state and decides whether to turn LEDs on/off or adjust brightness. The optional USB inactivity timeout uses a delayable work item that gets scheduled when activity transitions to idle on USB and cancelled when it returns to active.
 
-The idle fade is a separate delayable work item that steps brightness down every 50 ms over `CONFIG_ZMK_EXT_POWER_SMART_IDLE_FADE_MS` milliseconds. The starting brightness is captured when the fade begins, so a wake mid-fade restores the same value the user last saw before the fade started. The battery-cutoff path does not fade; it cuts the MOSFET immediately since it is a low-battery protection event, not an idle event.
+The fade is a delayable work item that steps brightness down every 50 ms over `CONFIG_ZMK_EXT_POWER_SMART_IDLE_FADE_MS` milliseconds. The starting brightness is captured when the fade begins, so a wake mid-fade restores the same value the user last saw before the fade started. The fade applies to every auto-off path: on-battery idle, on-USB idle timeout, unplug-while-idle, and battery cutoff. The pre-fade brightness is held in RAM and restored when conditions change (USB reconnects, battery rises above cutoff, or activity resumes).
 
 ### No Flash Writes
 
