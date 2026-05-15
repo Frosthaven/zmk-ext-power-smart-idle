@@ -109,6 +109,17 @@ CONFIG_ZMK_EXT_POWER_SMART_IDLE_USB_TIMEOUT_S=7200
 # Optional: fade RGB brightness to 0 over this many ms before the idle MOSFET cut
 # Set to 0 for instant off (the original behavior)
 CONFIG_ZMK_EXT_POWER_SMART_IDLE_FADE_MS=2000
+
+# Optional (requires the Frosthaven/zmk fork, branch v0.3-peripheral-charging-bit):
+# Share smart-idle state across split halves so idle/cutoff decisions are made
+# from the combined activity + battery state of both halves.
+# CONFIG_ZMK_SPLIT_BLE_SMART_IDLE_SYNC=y
+# CONFIG_ZMK_EXT_POWER_SMART_IDLE_SYNC_HALVES=y
+
+# Optional (requires the Frosthaven/zmk fork): continuously enforce the cap
+# while on battery so RGB_BRI presses can't push visible brightness above it.
+# CONFIG_ZMK_RGB_UNDERGLOW_STATE_EVENT=y
+# CONFIG_ZMK_EXT_POWER_SMART_IDLE_ENFORCE_BRT_CAP=y
 ```
 
 ### Changing the Idle Timeout
@@ -132,6 +143,16 @@ ZMK fires its IDLE event after `ZMK_IDLE_TIMEOUT`. On battery the module begins 
 | `CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF` | `0` | Battery % at which LEDs turn off completely. 0 disables. Requires `CONFIG_ZMK_BATTERY=y` |
 | `CONFIG_ZMK_EXT_POWER_SMART_IDLE_USB_TIMEOUT_S` | `0` | Seconds of idle on USB before ext-power auto-offs. 0 keeps LEDs on indefinitely while plugged in. Restored on the next ACTIVE state |
 | `CONFIG_ZMK_EXT_POWER_SMART_IDLE_FADE_MS` | `2000` | Milliseconds to linearly fade RGB brightness to 0 before the idle MOSFET cut. 0 = instant off. Pre-fade brightness is restored from RAM on wake; no flash writes. Requires `CONFIG_ZMK_RGB_UNDERGLOW=y` |
+| `CONFIG_ZMK_EXT_POWER_SMART_IDLE_SYNC_HALVES` | `n` | **(Requires fork)** Share smart-idle state across split halves. Either-active = both active for idle fade; either-below-cutoff = both off. Depends on `CONFIG_ZMK_SPLIT_BLE_SMART_IDLE_SYNC` from the [Frosthaven/zmk fork](https://github.com/Frosthaven/zmk) (branch `v0.3-peripheral-charging-bit`). Hidden on stock ZMK. |
+| `CONFIG_ZMK_EXT_POWER_SMART_IDLE_ENFORCE_BRT_CAP` | `n` | **(Requires fork)** Continuously enforce the on-battery brightness cap (`BATTERY_BRT`). Without it, the cap can be exceeded by pressing RGB_BRI between trigger events. Depends on `CONFIG_ZMK_RGB_UNDERGLOW_STATE_EVENT` from the same fork. Hidden on stock ZMK. |
+
+### Want RGB only when plugged in?
+
+ZMK already ships this; no fork or smart-idle needed. Set
+`CONFIG_ZMK_RGB_UNDERGLOW_AUTO_OFF_USB=y` and the LED rail is cut on
+USB disconnect (zero drain via the MOSFET) and auto-restored when USB
+is reconnected. Compose with smart-idle's `BATTERY_BRT=0` if you don't
+want a battery-time dim band.
 
 ## Requirements
 

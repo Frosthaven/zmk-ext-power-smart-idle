@@ -52,3 +52,41 @@ config ZMK_EXT_POWER_SMART_IDLE_FADE_MS
       MOSFET. Only modifies runtime brightness state - no flash writes
       occur, and the pre-fade brightness is restored on wake. Set to 0 to
       disable the fade and cut ext-power instantly (the original behavior).
+
+config ZMK_EXT_POWER_SMART_IDLE_SYNC_HALVES
+    bool "Share smart-idle state across split halves (requires fork)"
+    depends on ZMK_EXT_POWER_SMART_IDLE
+    depends on ZMK_SPLIT_BLE_SMART_IDLE_SYNC
+    default n
+    help
+      Cross-half coordination for split keyboards. With this option on,
+      each half broadcasts its activity state and battery-cutoff state
+      to the other half so that:
+        * If EITHER half is ACTIVE, both halves treat themselves as
+          active for the idle fade-off decision. Idle fade only fires
+          when BOTH halves are idle.
+        * If EITHER half drops below the battery cutoff threshold, both
+          halves fade their LEDs off (preserves remaining typing time
+          for the lower cell). Restores when its own local battery is
+          back above cutoff or USB is connected.
+      Requires the matching ZMK_SPLIT_BLE_SMART_IDLE_SYNC option in the
+      ZMK fork at https://github.com/Frosthaven/zmk (branch
+      v0.3-peripheral-charging-bit). On stock ZMK this option is hidden
+      and each half runs independently as before.
+
+config ZMK_EXT_POWER_SMART_IDLE_ENFORCE_BRT_CAP
+    bool "Continuously enforce the on-battery brightness cap (requires fork)"
+    depends on ZMK_EXT_POWER_SMART_IDLE
+    depends on ZMK_RGB_UNDERGLOW
+    depends on ZMK_RGB_UNDERGLOW_STATE_EVENT
+    default n
+    help
+      Subscribes to the zmk_rgb_underglow_state_changed event and
+      re-clamps RGB brightness to BATTERY_BRT whenever the user
+      increases brightness past the cap while on battery. Without this
+      option, the cap is only applied at USB->battery transitions and
+      can be bypassed by pressing RGB_BRI multiple times. Requires the
+      matching ZMK_RGB_UNDERGLOW_STATE_EVENT option in the ZMK fork at
+      https://github.com/Frosthaven/zmk (branch
+      v0.3-peripheral-charging-bit). On stock ZMK this option is hidden
+      and the cap remains the one-shot behavior.

@@ -30,6 +30,27 @@
 #include <zmk/events/battery_state_changed.h>
 #endif
 
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_SMART_IDLE_SYNC) &&                                            \
+    IS_ENABLED(CONFIG_ZMK_EXT_POWER_SMART_IDLE_SYNC_HALVES)
+#include <zmk/events/split_remote_smart_idle_state_changed.h>
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+#include <zmk/split/central.h>
+#else
+#include <zmk/split/bluetooth/service.h>
+#endif
+#define SMART_IDLE_SYNC_ENABLED 1
+#else
+#define SMART_IDLE_SYNC_ENABLED 0
+#endif
+
+#if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_STATE_EVENT) &&                                            \
+    IS_ENABLED(CONFIG_ZMK_EXT_POWER_SMART_IDLE_ENFORCE_BRT_CAP)
+#include <zmk/events/rgb_underglow_state_changed.h>
+#define SMART_IDLE_BRT_CAP_ENFORCE 1
+#else
+#define SMART_IDLE_BRT_CAP_ENFORCE 0
+#endif
+
 #define EXT_POWER_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(zmk_ext_power_generic)
 
 #if !DT_NODE_HAS_STATUS(EXT_POWER_NODE, okay)
@@ -96,7 +117,7 @@ static void cancel_fade_and_restore(void) {
     k_work_cancel_delayable(&fade_work);
     struct zmk_led_hsb hsb = zmk_rgb_underglow_calc_brt(0);
     hsb.b = fade_start_brt;
-    zmk_rgb_underglow_set_hsb(hsb);
+    zmk_rgb_underglow_set_hsb_silent(hsb);
     fade_active = false;
 }
 
@@ -108,7 +129,7 @@ static void fade_step_handler(struct k_work *work) {
         /* Fade complete - cut MOSFET. fade_active stays true so a wake
          * restores brightness; cleared in cancel_fade_and_restore. */
         hsb.b = 0;
-        zmk_rgb_underglow_set_hsb(hsb);
+        zmk_rgb_underglow_set_hsb_silent(hsb);
         gpio_pin_set_dt(&ext_power_gpio, 0);
         auto_off_active = true;
         return;
@@ -117,7 +138,7 @@ static void fade_step_handler(struct k_work *work) {
     uint32_t remaining = (uint32_t)(CONFIG_ZMK_EXT_POWER_SMART_IDLE_FADE_MS - elapsed);
     hsb.b = (uint8_t)((uint32_t)fade_start_brt * remaining /
                       CONFIG_ZMK_EXT_POWER_SMART_IDLE_FADE_MS);
-    zmk_rgb_underglow_set_hsb(hsb);
+    zmk_rgb_underglow_set_hsb_silent(hsb);
     k_work_schedule(&fade_work, K_MSEC(FADE_STEP_MS));
 }
 
@@ -157,7 +178,7 @@ static void clamp_brightness(void) {
     if (hsb.b > cap) {
         saved_brt = hsb.b;
         hsb.b = cap;
-        zmk_rgb_underglow_set_hsb(hsb);
+        zmk_rgb_underglow_set_hsb_silent(hsb);
         brt_clamped = true;
     }
 }
@@ -168,38 +189,155 @@ static void restore_brightness(void) {
     }
     struct zmk_led_hsb hsb = zmk_rgb_underglow_calc_brt(0);
     hsb.b = saved_brt;
-    zmk_rgb_underglow_set_hsb(hsb);
+    zmk_rgb_underglow_set_hsb_silent(hsb);
     brt_clamped = false;
 }
 #endif
+
+static void update_state(void);
+
+#if SMART_IDLE_SYNC_ENABLED
+
+/* Tracks what the other half last broadcast so update_state can apply
+ * the combined policy: ACTIVE if either half is active; battery cutoff
+ * if either half is below cutoff. */
+static bool remote_active = false;
+static bool remote_battery_below_cutoff = false;
+static uint8_t last_sent_state = 0xFF;
+
+static uint8_t local_state_byte(void) {
+    uint8_t s = 0;
+    if (zmk_activity_get_state() == ZMK_ACTIVITY_ACTIVE) {
+        s |= 0x01;
+    }
+#if CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF > 0
+    /* Mirror the same threshold check update_state uses so peers learn
+     * immediately rather than waiting for the local fade to start. */
+    if (!zmk_usb_is_powered()) {
+        uint8_t lvl = zmk_battery_state_of_charge();
+        if (lvl > 0 && lvl <= CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF) {
+            s |= 0x02;
+        }
+    }
+#endif
+    return s;
+}
+
+static void send_local_state(void) {
+    uint8_t s = local_state_byte();
+    if (s == last_sent_state) {
+        return;
+    }
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+    int ret = zmk_split_central_set_central_smart_idle_state(s);
+#else
+    int ret = zmk_split_bt_service_notify_smart_idle_state(s);
+#endif
+    if (ret >= 0) {
+        last_sent_state = s;
+    }
+}
+
+static int smart_idle_remote_state_listener(const zmk_event_t *eh) {
+    const struct zmk_split_remote_smart_idle_state_changed *ev =
+        as_zmk_split_remote_smart_idle_state_changed(eh);
+    if (ev == NULL) {
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+    remote_active = ev->active;
+    remote_battery_below_cutoff = ev->battery_below_cutoff;
+    update_state();
+    return ZMK_EV_EVENT_BUBBLE;
+}
+
+ZMK_LISTENER(ext_power_smart_idle_remote, smart_idle_remote_state_listener);
+ZMK_SUBSCRIPTION(ext_power_smart_idle_remote, zmk_split_remote_smart_idle_state_changed);
+
+#else /* !SMART_IDLE_SYNC_ENABLED */
+
+#define remote_active false
+#define remote_battery_below_cutoff false
+static inline void send_local_state(void) {}
+
+#endif /* SMART_IDLE_SYNC_ENABLED */
+
+#if SMART_IDLE_BRT_CAP_ENFORCE
+
+/* Re-clamp brightness whenever a user RGB_BRI / RGB_BRD / set_hsb push
+ * crosses the cap while on battery. Smart-idle's own internal mutations
+ * go through zmk_rgb_underglow_set_hsb_silent() so this listener does
+ * not see them - the only events that arrive here are user-initiated
+ * (RGB_BRI/RGB_BRD/RGB_TOG), so there is no feedback loop. */
+static int smart_idle_brt_cap_listener(const zmk_event_t *eh) {
+    const struct zmk_rgb_underglow_state_changed *ev = as_zmk_rgb_underglow_state_changed(eh);
+    if (ev == NULL) {
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+    /* Cap only applies on battery */
+    if (zmk_usb_is_powered()) {
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+#if CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT > 0
+    uint8_t cap = CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT;
+    /* Track the user's intent regardless of cap so restore_brightness
+     * picks it up on the next USB plug-in. */
+    saved_brt = ev->brightness;
+    if (ev->brightness > cap) {
+        struct zmk_led_hsb hsb = zmk_rgb_underglow_calc_brt(0);
+        hsb.b = cap;
+        zmk_rgb_underglow_set_hsb_silent(hsb);
+        brt_clamped = true;
+    } else {
+        /* User dialed below cap; no clamp needed but stay tracking. */
+        brt_clamped = false;
+    }
+#endif
+    return ZMK_EV_EVENT_BUBBLE;
+}
+
+ZMK_LISTENER(ext_power_smart_idle_brt_cap, smart_idle_brt_cap_listener);
+ZMK_SUBSCRIPTION(ext_power_smart_idle_brt_cap, zmk_rgb_underglow_state_changed);
+
+#endif /* SMART_IDLE_BRT_CAP_ENFORCE */
 
 static void update_state(void) {
     enum zmk_activity_state activity = zmk_activity_get_state();
     bool usb_powered = zmk_usb_is_powered();
 
+    /* Combined state used by the idle/cutoff branches. When SYNC_HALVES
+     * is off, remote_* are compile-time false and effective_* collapse
+     * to the local-only behavior. */
+    bool effective_active = (activity == ZMK_ACTIVITY_ACTIVE) || remote_active;
+
 #if CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF > 0
     uint8_t battery_level = zmk_battery_state_of_charge();
     uint8_t cutoff = CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF;
+    bool local_below_cutoff =
+        (!usb_powered && battery_level <= cutoff && battery_level > 0);
+    bool effective_below_cutoff = local_below_cutoff || remote_battery_below_cutoff;
 
-    if (!usb_powered && battery_level <= cutoff && battery_level > 0) {
-        /* Battery below cutoff while wireless - fade out, then cut MOSFET.
+    if (effective_below_cutoff && !usb_powered) {
+        /* Either half is below cutoff while wireless - fade out and cut.
          * The fade uses the same FADE_MS setting as the idle paths so the
          * user gets a consistent visual cue for any auto-off event. */
         if (!battery_cutoff_active) {
             battery_cutoff_active = true;
             start_fade_off();
         }
+        send_local_state();
         return;
     }
 
-    if (battery_cutoff_active && (usb_powered || battery_level > cutoff)) {
+    if (battery_cutoff_active && (usb_powered || !effective_below_cutoff)) {
         battery_cutoff_active = false;
         /* Fall through to normal logic to restore state */
     }
 #endif
 
-    if (activity == ZMK_ACTIVITY_ACTIVE || usb_powered) {
-        active_state_seen = true;
+    if (effective_active || usb_powered) {
+        if (activity == ZMK_ACTIVITY_ACTIVE) {
+            active_state_seen = true;
+        }
         /* Active or on USB - cancel any in-progress fade and restore the
          * pre-fade brightness in runtime state before re-enabling MOSFET so
          * the LEDs come back up at the brightness the user expects. */
@@ -212,12 +350,15 @@ static void update_state(void) {
         if (activity == ZMK_ACTIVITY_ACTIVE) {
             /* User active - cancel any pending USB-idle countdown */
             k_work_cancel_delayable(&usb_idle_off_work);
-        } else if (usb_powered && activity == ZMK_ACTIVITY_IDLE) {
-            /* USB plugged + idle - start countdown to auto-off.
-             * k_work_schedule is a no-op if already scheduled, so repeated
-             * events while idle don't reset the timer. */
+        } else if (usb_powered && activity == ZMK_ACTIVITY_IDLE && !remote_active) {
+            /* USB plugged + locally idle (and remote not active) - start
+             * countdown to auto-off. k_work_schedule is a no-op if already
+             * scheduled, so repeated events while idle don't reset it. */
             k_work_schedule(&usb_idle_off_work,
                             K_SECONDS(CONFIG_ZMK_EXT_POWER_SMART_IDLE_USB_TIMEOUT_S));
+        } else if (remote_active) {
+            /* Remote half just went active - cancel pending USB-idle off */
+            k_work_cancel_delayable(&usb_idle_off_work);
         }
 #endif
 #if CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT > 0
@@ -228,13 +369,17 @@ static void update_state(void) {
         }
 #endif
     } else if (activity == ZMK_ACTIVITY_IDLE && !usb_powered && active_state_seen) {
-        /* On battery + idle - auto-off if user has ext-power on. Skipped until
-         * we've observed at least one ACTIVE state, so a boot-time IDLE event
-         * (fired before USB enumeration completes) doesn't shut us off. */
+        /* On battery + both halves idle - auto-off if user has ext-power on.
+         * Skipped until we've observed at least one ACTIVE state so a
+         * boot-time IDLE event doesn't shut us off. With SYNC_HALVES on,
+         * remote_active is also factored into effective_active above; we
+         * only reach this branch when both halves are idle. */
         if (!auto_off_active) {
             start_fade_off();
         }
     }
+
+    send_local_state();
 }
 
 static int ext_power_smart_idle_listener(const zmk_event_t *eh) {
