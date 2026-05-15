@@ -12,8 +12,6 @@ A ZMK module that automatically manages your keyboard's external power rail and 
 2. **Turns LEDs off when you stop typing** (after the ZMK idle timeout, default 30 seconds) and turns them back on when you start again
 3. **Turns LEDs off at low battery** (optional, e.g. at 5%) to save the remaining power for typing
 
-**When you plug USB back in**, full brightness is restored automatically.
-
 The module also respects your manual toggles. If you turn LEDs off yourself, it won't fight you and turn them back on.
 
 ## At a Glance
