@@ -43,10 +43,17 @@
 #define SMART_IDLE_SYNC_ENABLED 0
 #endif
 
-#if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_STATE_EVENT) &&                                            \
+#if IS_ENABLED(CONFIG_ZMK_RGB_UNDERGLOW_RUNTIME_CAP) &&                                            \
     IS_ENABLED(CONFIG_ZMK_EXT_POWER_SMART_IDLE_ENFORCE_BRT_CAP)
-#include <zmk/events/rgb_underglow_state_changed.h>
+/* The runtime cap is set via zmk_rgb_underglow_set_runtime_max_brightness()
+ * (declared in zmk/rgb_underglow.h, already included above). The cap
+ * is applied at the render layer so state.color.b is never mutated by
+ * smart-idle - the user's pressed-up brightness accumulates normally
+ * and persists to NVS at its intended value. */
 #define SMART_IDLE_BRT_CAP_ENFORCE 1
+/* "No cap" value passed to the setter when on USB. BRT_MAX is 100 in
+ * ZMK and state.color.b can never exceed it, so 100 == disable cap. */
+#define SMART_IDLE_RUNTIME_CAP_DISABLED 100
 #else
 #define SMART_IDLE_BRT_CAP_ENFORCE 0
 #endif
@@ -197,6 +204,25 @@ static K_WORK_DELAYABLE_DEFINE(usb_idle_off_work, usb_idle_off_handler);
 #endif
 
 #if CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT > 0
+
+#if SMART_IDLE_BRT_CAP_ENFORCE
+/* Render-layer cap path (preferred). state.color.b is never mutated
+ * by clamp/restore; we just slide the soft cap that hsb_scale_min_max
+ * applies. NVS preserves the user's pressed-up brightness exactly. */
+static void clamp_brightness(void) {
+    zmk_rgb_underglow_set_runtime_max_brightness(
+        CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT);
+}
+
+static void restore_brightness(void) {
+    zmk_rgb_underglow_set_runtime_max_brightness(SMART_IDLE_RUNTIME_CAP_DISABLED);
+}
+#else
+/* Legacy one-shot mutation path for stock-ZMK builds without the
+ * runtime cap feature. Cap fires once at the USB->battery transition
+ * and pins state.color.b at the cap value; the next RGB_BRI press can
+ * lift it back above the cap (known limitation - upgrade the fork +
+ * enable RUNTIME_CAP + ENFORCE_BRT_CAP to fix). */
 static bool brt_clamped = false;
 static uint8_t saved_brt = 0;
 
@@ -223,7 +249,9 @@ static void restore_brightness(void) {
     zmk_rgb_underglow_set_hsb_silent(hsb);
     brt_clamped = false;
 }
-#endif
+#endif /* SMART_IDLE_BRT_CAP_ENFORCE */
+
+#endif /* CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT > 0 */
 
 static void update_state(void);
 
@@ -292,44 +320,16 @@ static inline void send_local_state(void) {}
 
 #endif /* SMART_IDLE_SYNC_ENABLED */
 
-#if SMART_IDLE_BRT_CAP_ENFORCE
-
-/* Re-clamp brightness whenever a user RGB_BRI / RGB_BRD / set_hsb push
- * crosses the cap while on battery. Smart-idle's own internal mutations
- * go through zmk_rgb_underglow_set_hsb_silent() so this listener does
- * not see them - the only events that arrive here are user-initiated
- * (RGB_BRI/RGB_BRD/RGB_TOG), so there is no feedback loop. */
-static int smart_idle_brt_cap_listener(const zmk_event_t *eh) {
-    const struct zmk_rgb_underglow_state_changed *ev = as_zmk_rgb_underglow_state_changed(eh);
-    if (ev == NULL) {
-        return ZMK_EV_EVENT_BUBBLE;
-    }
-    /* Cap only applies on battery */
-    if (smart_idle_usb_powered()) {
-        return ZMK_EV_EVENT_BUBBLE;
-    }
-#if CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT > 0
-    uint8_t cap = CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT;
-    /* Track the user's intent regardless of cap so restore_brightness
-     * picks it up on the next USB plug-in. */
-    saved_brt = ev->brightness;
-    if (ev->brightness > cap) {
-        struct zmk_led_hsb hsb = zmk_rgb_underglow_calc_brt(0);
-        hsb.b = cap;
-        zmk_rgb_underglow_set_hsb_silent(hsb);
-        brt_clamped = true;
-    } else {
-        /* User dialed below cap; no clamp needed but stay tracking. */
-        brt_clamped = false;
-    }
-#endif
-    return ZMK_EV_EVENT_BUBBLE;
-}
-
-ZMK_LISTENER(ext_power_smart_idle_brt_cap, smart_idle_brt_cap_listener);
-ZMK_SUBSCRIPTION(ext_power_smart_idle_brt_cap, zmk_rgb_underglow_state_changed);
-
-#endif /* SMART_IDLE_BRT_CAP_ENFORCE */
+/* (The previous per-event brt_cap_listener has been removed. With
+ * the render-layer runtime cap, the cap is applied during pixel
+ * rendering inside hsb_scale_min_max, so we don't need to react to
+ * every user brightness key press - state.color.b is allowed to climb
+ * to BRT_MAX and persist, and the visual stays under BATTERY_BRT
+ * while the cap is set. The cap is toggled in update_state() below
+ * on USB plug / unplug transitions via clamp_brightness() and
+ * restore_brightness(), which now call
+ * zmk_rgb_underglow_set_runtime_max_brightness() instead of mutating
+ * state.color.b.) */
 
 static void update_state(void) {
     enum zmk_activity_state activity = zmk_activity_get_state();

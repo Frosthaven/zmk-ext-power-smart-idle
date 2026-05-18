@@ -78,15 +78,19 @@ config ZMK_EXT_POWER_SMART_IDLE_ENFORCE_BRT_CAP
     bool "Continuously enforce the on-battery brightness cap (requires fork)"
     depends on ZMK_EXT_POWER_SMART_IDLE
     depends on ZMK_RGB_UNDERGLOW
-    depends on ZMK_RGB_UNDERGLOW_STATE_EVENT
+    depends on ZMK_RGB_UNDERGLOW_RUNTIME_CAP
     default n
     help
-      Subscribes to the zmk_rgb_underglow_state_changed event and
-      re-clamps RGB brightness to BATTERY_BRT whenever the user
-      increases brightness past the cap while on battery. Without this
-      option, the cap is only applied at USB->battery transitions and
-      can be bypassed by pressing RGB_BRI multiple times. Requires the
-      matching ZMK_RGB_UNDERGLOW_STATE_EVENT option in the ZMK fork at
-      https://github.com/Frosthaven/zmk (branch
-      v0.3-peripheral-charging-bit). On stock ZMK this option is hidden
-      and the cap remains the one-shot behavior.
+      Enforces BATTERY_BRT as a soft cap at the LED render layer (via
+      zmk_rgb_underglow_set_runtime_max_brightness) while on battery,
+      and lifts the cap when USB is connected. The user's pressed-up
+      brightness still accumulates in state.color.b all the way to
+      BRT_MAX and persists to NVS at its real value - only the visual
+      output is clamped. Without this option, the cap is applied
+      one-shot at the USB->battery transition by mutating state.color.b
+      (which causes NVS to capture the clamped value and the press-up
+      hotkey to bypass the cap until the next transition). Requires
+      the matching ZMK_RGB_UNDERGLOW_RUNTIME_CAP option in the ZMK
+      fork at https://github.com/Frosthaven/zmk (branch
+      v0.3-peripheral-charging-bit). On stock ZMK this option is
+      hidden and the legacy one-shot mutation path is used.
