@@ -51,6 +51,28 @@
 #define SMART_IDLE_BRT_CAP_ENFORCE 0
 #endif
 
+/* On split peripheral builds CONFIG_ZMK_USB is off (the peripheral isn't
+ * the USB HID device), so zmk_usb_is_powered() always returns false even
+ * when the peripheral is plugged in for charging. Fall through to a
+ * direct VBUS read via nrfx_power, the same trick battery.c uses for
+ * ZMK_BATTERY_ENCODE_PERIPHERAL_CHARGING. */
+#if IS_ENABLED(CONFIG_ZMK_SPLIT) && !IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) &&                  \
+    IS_ENABLED(CONFIG_NRFX_POWER)
+#define SMART_IDLE_PERIPHERAL_VBUS_DETECT 1
+#include <hal/nrf_power.h>
+#include <nrfx_power.h>
+#endif
+
+static inline bool smart_idle_usb_powered(void) {
+#if defined(SMART_IDLE_PERIPHERAL_VBUS_DETECT)
+    return nrf_power_usbregstatus_vbusdet_get(NRF_POWER);
+#elif IS_ENABLED(CONFIG_ZMK_USB)
+    return zmk_usb_is_powered();
+#else
+    return false;
+#endif
+}
+
 #define EXT_POWER_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(zmk_ext_power_generic)
 
 #if !DT_NODE_HAS_STATUS(EXT_POWER_NODE, okay)
@@ -157,7 +179,7 @@ static inline void cancel_fade_and_restore(void) {}
 #if CONFIG_ZMK_EXT_POWER_SMART_IDLE_USB_TIMEOUT_S > 0
 static void usb_idle_off_handler(struct k_work *work) {
     /* Re-check state when timer fires - user may have come back or unplugged */
-    if (!zmk_usb_is_powered() || zmk_activity_get_state() == ZMK_ACTIVITY_ACTIVE) {
+    if (!smart_idle_usb_powered() || zmk_activity_get_state() == ZMK_ACTIVITY_ACTIVE) {
         return;
     }
     start_fade_off();
@@ -213,7 +235,7 @@ static uint8_t local_state_byte(void) {
 #if CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF > 0
     /* Mirror the same threshold check update_state uses so peers learn
      * immediately rather than waiting for the local fade to start. */
-    if (!zmk_usb_is_powered()) {
+    if (!smart_idle_usb_powered()) {
         uint8_t lvl = zmk_battery_state_of_charge();
         if (lvl > 0 && lvl <= CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_CUTOFF) {
             s |= 0x02;
@@ -274,7 +296,7 @@ static int smart_idle_brt_cap_listener(const zmk_event_t *eh) {
         return ZMK_EV_EVENT_BUBBLE;
     }
     /* Cap only applies on battery */
-    if (zmk_usb_is_powered()) {
+    if (smart_idle_usb_powered()) {
         return ZMK_EV_EVENT_BUBBLE;
     }
 #if CONFIG_ZMK_EXT_POWER_SMART_IDLE_BATTERY_BRT > 0
@@ -302,7 +324,7 @@ ZMK_SUBSCRIPTION(ext_power_smart_idle_brt_cap, zmk_rgb_underglow_state_changed);
 
 static void update_state(void) {
     enum zmk_activity_state activity = zmk_activity_get_state();
-    bool usb_powered = zmk_usb_is_powered();
+    bool usb_powered = smart_idle_usb_powered();
 
     /* Combined state used by the idle/cutoff branches. When SYNC_HALVES
      * is off, remote_* are compile-time false and effective_* collapse
