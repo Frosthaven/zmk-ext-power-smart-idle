@@ -154,6 +154,15 @@ static void fade_step_handler(struct k_work *work) {
         zmk_rgb_underglow_set_hsb_silent(hsb);
         gpio_pin_set_dt(&ext_power_gpio, 0);
         auto_off_active = true;
+        /* Restore the in-RAM brightness back to the pre-fade value so any
+         * still-debouncing NVS save scheduled by an earlier user RGB_BRI/
+         * set_hsb (which serializes the shared rgb_underglow state struct
+         * at debounce-fire time) captures the user's intended brightness
+         * instead of the 0 we just walked it down to. The MOSFET is now
+         * cut so the LEDs are dark regardless of state.color.b, making
+         * the restore visually invisible. */
+        hsb.b = fade_start_brt;
+        zmk_rgb_underglow_set_hsb_silent(hsb);
         return;
     }
 
