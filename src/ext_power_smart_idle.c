@@ -305,6 +305,23 @@ static int smart_idle_remote_state_listener(const zmk_event_t *eh) {
     }
     remote_active = ev->active;
     remote_battery_below_cutoff = ev->battery_below_cutoff;
+    /* TEMP DEBUG (remove after diagnosing trackpad-build central->peripheral
+     * wake): if a "remote half is ACTIVE" message reaches this listener, the
+     * central->peripheral write IS being delivered. Force the LED rail on
+     * unconditionally here, bypassing update_state()'s combined-state logic,
+     * so we can see it with no console:
+     *   - peripheral lights up when you interact with the central  => the
+     *     write arrives; the bug is downstream in the wake logic (and this
+     *     line is effectively the fix).
+     *   - peripheral stays dark                                    => the
+     *     write never arrives; it's a delivery problem. */
+    if (ev->active) {
+        cancel_fade_and_restore();
+        if (device_is_ready(ext_power_dev)) {
+            gpio_pin_set_dt(&ext_power_gpio, 1);
+        }
+        auto_off_active = false;
+    }
     update_state();
     return ZMK_EV_EVENT_BUBBLE;
 }
